@@ -1,0 +1,97 @@
+Q: Do you understand the steps involved in creating and deploying an LTR model?  Name them and describe what each step does in your own words.
+
+A: 
+
+1) Initialize the LTR storage
+
+- tell OpenSearch where to expect data about ltr models 
+
+2) Populate the OpenSearch LTR feature store for the application with a feature set.
+
+- decide which features you will use in your LTR model
+
+3) Collect judgments, either explicitly or implicitly. For our toy example, we will create explicit judgments.  For our project, we will use implicit judgments based on our query-click logs.
+
+- either from expert raters or from click logs, collect relevance judgements about whether a particular document is a good match (or degree of match for graded relevants) for a given query
+
+4) Join the features with the judgments by “logging the feature scores” to create a training data set – this involves executing queries to retrieve the defined features for each document, gathering the associated weights and writing out the results.
+
+- "logging the feature scores" means executing a query to extract the LTR features you care about so that you can eventually build a training set after joining back to judgements
+
+5) Train and test your model.
+
+- learn patterns from your training data and collect them in a model
+
+6) Deploy your model to OpenSearch.
+
+- a POST to the createmodel endpoint so that OpenSearch has access to your newly trained model at search time
+
+7) Search with LTR in your application.
+
+- use the model you just built to execute searches for new queries
+
+===============================
+
+Q: What is a feature and featureset?
+
+A: 
+
+a feature is any signal that might help you predict whether or not a given document will be clicked (or, more correctly, is relevant) for a given query
+
+a featureset is a collection of one or more features
+
+===============================
+
+Q: What is the difference between precision and recall?
+
+A:
+
+precision is a measure of how correct your model is for items that it *thinks* are relevant
+
+recall is a measure of how many truly relevant items are actually marked as relevant by your model
+
+===============================
+
+Q: What are some of the traps associated with using click data in your model?
+
+A:
+
+clicks are known to suffer from position bias, that is, people tend to click more on items at the top of a result set simply because they are at the top regardless of their true relevance
+
+people can click for neutral reasons like just being curious or even negative reasons like if the document is clickbait-y or misleading. If your model learns from clicks, it might also learn to prioritize anti-patterns in user behaviour
+
+===============================
+
+Q: What are some of the ways we are faking our data and how would you prevent that in your application?
+
+A:
+
+We are faking the data since we only have clicks in this dataset and do not actually have access to unclikced impressions. We would prevent this in our application by logging not only items that were clicked on, but also the surrounding context of items that were not clicked on for each query. The surrouding context is very important since it helps build a more accurate story of why a user chose to click on document X *instead* of documents A,B,C...
+
+===============================
+
+Q: What is target leakage and why is it a bad thing?
+
+A:
+
+target leakage is when you give away the answers when training your model. The most explicit form of this would be if you use the target as a feature in the model. If you do this, it will get 100% on whatever performance metric you use but you clearly do not have access to this feature in the real world since it is the very thing you want to predict. Target leakage can give you a false sense of success which is impossible to reproduce in the real world.
+
+===============================
+
+Q: When can using prior history cause problems in search and LTR?
+
+A:
+
+When your search ecosystem is quickly evolving and product versions are changing, prior click history can cause problems. That is, clicks on a v1 of a product might no longer be relevant for predicing clicks on a v2 of that product
+
+===============================
+
+Q: Submit your project along with your best MRR scores
+
+A:
+
+Simple MRR is 0.319
+LTR Simple MRR is 0.300
+Hand tuned MRR is 0.428
+LTR Hand Tuned MRR is 0.429
+
