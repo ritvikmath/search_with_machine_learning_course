@@ -12,6 +12,178 @@
             "name": "{{keywords}}"
           }
         }
+      },
+      {
+        "name": "match_phrase_name",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match_phrase": {
+            "name.hyphens": {
+              "query": "{{keywords}}",
+              "slop": 6
+            }
+          }
+        }
+      },
+      {
+        "name": "match_phrase_artist_name",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match_phrase": {
+            "artistName.hyphens": {
+              "query": "{{keywords}}",
+              "slop": 6
+            }
+          }
+        }
+      },
+      {
+        "name": "match_phrase_short_desc",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match_phrase": {
+            "shortDescription.hyphens": {
+              "query": "{{keywords}}",
+              "slop": 6
+            }
+          }
+        }
+      },
+      {
+        "name": "match_phrase_features",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match_phrase": {
+            "features.hyphens": {
+              "query": "{{keywords}}",
+              "slop": 6
+            }
+          }
+        }
+      },
+      {
+        "name": "match_phrase_long_desc",
+        "params": [
+          "keywords"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "match_phrase": {
+            "longDescription": {
+              "query": "{{keywords}}",
+              "slop": 6
+            }
+          }
+        }
+      },
+      {
+        "name": "customer_review_average",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "field_value_factor": {
+              "field": "customerReviewAverage",
+              "missing": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "customer_review_count",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "field_value_factor": {
+              "field": "customerReviewCount",
+              "missing": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "product_price",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "field_value_factor": {
+              "field": "regularPrice",
+              "missing": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "click_prior",
+        "params": [
+          "click_prior_query"
+        ],
+        "template_language": "mustache",
+        "template": {
+          "query_string": {
+            "query": "{{click_prior_query}}",
+            "fields": ["_id"]
+          }
+        }
+      },
+      {
+        "name": "srank_short_term",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "field_value_factor": {
+              "field": "salesRankShortTerm",
+              "missing": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "srank_medium_term",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "field_value_factor": {
+              "field": "salesRankMediumTerm",
+              "missing": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "srank_long_term",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "field_value_factor": {
+              "field": "salesRankLongTerm",
+              "missing": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "best_selling_rank",
+        "template_language": "mustache",
+        "template": {
+          "function_score": {
+            "field_value_factor": {
+              "field": "bestSellingRank",
+              "missing": 0
+            }
+          }
+        }
       }
     ]
   }
