@@ -1,0 +1,97 @@
+=== For classifying product names to categories: ===
+
+What precision (P@1) were you able to achieve?
+
+- I was able to achieve 0.8 P@1
+
+What fastText parameters did you use?
+
+- I used -lr 1.0 -epoch 25 -wordNgrams 2
+
+How did you transform the product names?
+
+- I used the recommended cleanup steps
+
+"Remove all non-alphanumeric characters other than underscore (which we need for the labels!).
+
+Convert all letters to lowercase.
+
+Trim excess space characters so that tokens are separated by a single space.""
+
+How did you prune infrequent category labels, and how did that affect your precision?
+
+- I removed any product category with less than 500 products in the data, this gave me a substantial boost in P@1 from 0.5 to 0.8
+
+How did you prune the category tree, and how did that affect your precision?
+
+- I wasn't able to get to this step
+
+=== For deriving synonyms from content: ===
+
+What were the results for your best model in the tokens used for evaluation?
+
+- Some sampled results:
+
+Query word? hdtv
+class 0.836568
+1080p 0.791493
+720p 0.722539
+120hz 0.714985
+60hz 0.688273
+240hz 0.675597
+bravia 0.675151
+ray 0.669331
+theater 0.659313
+46 0.643753
+
+Query word? microwave
+range 0.755401
+spacemaker 0.751969
+over 0.713877
+oven 0.688898
+smooth 0.68395
+convection 0.65657
+freezer 0.614625
+refrigerator 0.60381
+hotpoint 0.599304
+ft 0.593901
+
+Query word? laptop
+laptops 0.666693
+notebook 0.648043
+processor 0.514977
+macbook 0.513329
+espresso 0.509891
+500gb 0.506641
+netbook 0.503162
+messenger 0.502858
+obsidian 0.496081
+display 0.495163
+
+What fastText parameters did you use?
+
+- I used -epoch 25 -minCount 20
+
+How did you transform the product names?
+
+I used the following command to clean up product names
+
+"cat /workspace/datasets/fasttext/titles.txt | sed -e "s/\([.\!?,'/()]\)/ \1 /g" | tr "[:upper:]" "[:lower:]" | sed "s/[^[:alnum:]]/ /g" | tr -s ' ' > /workspace/datasets/fasttext/normalized_titles.txt"
+
+=== For integrating synonyms with search: ===
+
+How did you transform the product names (if different than previously)?
+
+- no differences
+
+What threshold score did you use?
+
+- I used 0.75
+
+Were you able to find the additional results by matching synonyms?
+
+- Somewhat, I saw the number of results change when using --synonyms vs not using this flag, but the changes were not as substantial as expected from the Project 2 instructions
+
+=== For classifying reviews: ===
+
+- Unfortunately didnt have time for this.
