@@ -11,6 +11,12 @@ from urllib.parse import urljoin
 import pandas as pd
 import fileinput
 import logging
+import fasttext
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
+#model = fasttext.load_model('/workspace/datasets/fasttext/query_classifier.bin')
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
 
 logger = logging.getLogger(__name__)
@@ -47,9 +53,44 @@ def create_prior_queries(doc_ids, doc_id_weights,
                 pass  # nothing to do in this case, it just means we can't find priors for this doc
     return click_prior_query
 
+#vector search
+def create_vector_query(user_query, n_results=100):
+    embedding = model.encode([user_query]) 
+    query = {
+        "size": n_results,
+        "query": {
+            "knn": {
+            "embeddings": {
+                "vector": list(embedding[0]),
+                "k": n_results
+                }
+            }
+        }
+    }
+    return query
+
 
 # Hardcoded query here.  Better to use search templates or other query config.
-def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None):
+def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None, use_synonym=False, use_pred_cat=False, pred_cat=''):
+
+    name_field = 'name'
+    if use_synonym:
+        name_field = 'name_synonyms'
+
+    must_clause = []
+
+    if use_pred_cat == False:
+        pred_cat = ''
+    else:
+        pred_cat = [p[9:] for p in pred_cat]
+        must_clause.append({
+                    "terms": {
+                            "categoryPathIds": pred_cat
+                            }
+                    }
+                )
+    print(f'predicted category: {pred_cat}')
+
     query_obj = {
         'size': size,
         "sort": [
@@ -59,13 +100,11 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
             "function_score": {
                 "query": {
                     "bool": {
-                        "must": [
-
-                        ],
+                        "must": must_clause,
                         "should": [  #
                             {
                                 "match": {
-                                    "name": {
+                                    name_field: {
                                         "query": user_query,
                                         "fuzziness": "1",
                                         "prefix_length": 2,
@@ -76,7 +115,7 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
                             },
                             {
                                 "match_phrase": {  # near exact phrase match
-                                    "name.hyphens": {
+                                    f"{name_field}.hyphens": {
                                         "query": user_query,
                                         "slop": 1,
                                         "boost": 50
@@ -89,7 +128,7 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
                                     "type": "phrase",
                                     "slop": "6",
                                     "minimum_should_match": "2<75%",
-                                    "fields": ["name^10", "name.hyphens^10", "shortDescription^5",
+                                    "fields": [f"{name_field}^10", f"{name_field}.hyphens^10", "shortDescription^5",
                                                "longDescription^5", "department^0.5", "sku", "manufacturer", "features",
                                                "categoryPath"]
                                 }
@@ -103,7 +142,7 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
                             },
                             {  # lots of products have hyphens in them or other weird casing things like iPad
                                 "match": {
-                                    "name.hyphens": {
+                                    f"{name_field}.hyphens": {
                                         "query": user_query,
                                         "operator": "OR",
                                         "minimum_should_match": "2<75%"
@@ -167,6 +206,11 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
             }
         }
     }
+
+    print('\n')
+    print(query_obj)
+    print('\n')
+
     if click_prior_query is not None and click_prior_query != "":
         query_obj["query"]["function_score"]["query"]["bool"]["should"].append({
             "query_string": {
@@ -183,14 +227,29 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
             print("Couldn't replace query for *")
     if source is not None:  # otherwise use the default and retrieve all source
         query_obj["_source"] = source
+
     return query_obj
 
 
-def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc"):
+def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", use_synonym=False, use_pred_cat=False, use_vector_search=False):
     #### W3: classify the query
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
-    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"])
+
+    #get predicted categories (fasttext)
+    if use_pred_cat:
+        pred = model.predict(user_query, k=100)
+        scores = pred[1]
+        cumulsum_scores = np.cumsum(scores)
+        num_cats = max(1, np.argmin(cumulsum_scores <= 0.5))
+        category = pred[0][:num_cats]
+    else:
+        category = ''
+
+    if use_vector_search:
+        query_obj = create_vector_query(user_query, 100)
+    else:
+        query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], use_synonym=use_synonym, size=1, use_pred_cat=use_pred_cat, pred_cat=category)
     logging.info(query_obj)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
@@ -212,6 +271,24 @@ if __name__ == "__main__":
                          help='The OpenSearch port')
     general.add_argument('--user',
                          help='The OpenSearch admin.  If this is set, the program will prompt for password too. If not set, use default of admin/admin')
+    general.add_argument(
+        '--synonyms',
+        help='if you want to use synonyms',
+        action="store_true",
+        default=False
+    )
+    general.add_argument(
+        '--predcat',
+        help='if you want to use predicated category',
+        action="store_true",
+        default=False
+    )
+    general.add_argument(
+        '--vector',
+        help='if you want to use vector search',
+        action="store_true",
+        default=False
+    )
 
     args = parser.parse_args()
 
@@ -241,12 +318,13 @@ if __name__ == "__main__":
     index_name = args.index
     query_prompt = "\nEnter your query (type 'Exit' to exit or hit ctrl-c):"
     print(query_prompt)
-    for line in fileinput.input():
+    
+    #changed the fileinput here because it was causing errors with the --synonyms arg
+    while True:
+        line = input()
         query = line.rstrip()
         if query == "Exit":
             break
-        search(client=opensearch, user_query=query, index=index_name)
+        search(client=opensearch, user_query=query, index=index_name, sort="salePrice", use_synonym=args.synonyms, use_pred_cat=args.predcat, use_vector_search=args.vector)
 
         print(query_prompt)
-
-    

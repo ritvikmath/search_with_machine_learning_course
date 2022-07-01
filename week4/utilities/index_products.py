@@ -3,6 +3,8 @@ import opensearchpy
 import requests
 from lxml import etree
 
+from sentence_transformers import SentenceTransformer
+
 import os
 import click
 import glob
@@ -106,8 +108,7 @@ def get_opensearch():
 
 def index_file(file, index_name, reduced=False):
     logger.info("Creating Model")
-    # IMPLEMENT ME: instantiate the sentence transformer model!
-    
+    model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
     logger.info("Ready to index")
 
     docs_indexed = 0
@@ -136,11 +137,19 @@ def index_file(file, index_name, reduced=False):
             continue
         if reduced and ('categoryPath' not in doc or 'Best Buy' not in doc['categoryPath'] or 'Movies & Music' in doc['categoryPath']):
             continue
+
         docs.append({'_index': index_name, '_id':doc['sku'][0], '_source' : doc})
+        names.append(str(doc['name']))
         #docs.append({'_index': index_name, '_source': doc})
         docs_indexed += 1
         if docs_indexed % 200 == 0:
             logger.info("Indexing")
+            embeddings = model.encode(names)
+            for i in range(len(docs)):
+                emb = embeddings[i]
+                doc = docs[i]['_source']
+                doc['embeddings'] = list(emb)
+            logger.info(str(set([k for doc in docs for k in doc['_source'].keys()])))
             bulk(client, docs, request_timeout=60)
             logger.info(f'{docs_indexed} documents indexed')
             docs = []
