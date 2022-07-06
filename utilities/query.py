@@ -11,6 +11,10 @@ from urllib.parse import urljoin
 import pandas as pd
 import fileinput
 import logging
+import fasttext
+import numpy as np
+
+model = fasttext.load_model('/workspace/datasets/fasttext/query_classifier.bin')
 
 
 logger = logging.getLogger(__name__)
@@ -49,11 +53,25 @@ def create_prior_queries(doc_ids, doc_id_weights,
 
 
 # Hardcoded query here.  Better to use search templates or other query config.
-def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None, use_synonym=False):
+def create_query(user_query, click_prior_query, filters, sort="_score", sortDir="desc", size=10, source=None, use_synonym=False, use_pred_cat=False, pred_cat=''):
 
     name_field = 'name'
     if use_synonym:
         name_field = 'name_synonyms'
+
+    must_clause = []
+
+    if use_pred_cat == False:
+        pred_cat = ''
+    else:
+        pred_cat = [p[9:] for p in pred_cat]
+        must_clause.append({
+                    "terms": {
+                            "categoryPathIds": pred_cat
+                            }
+                    }
+                )
+    print(f'predicted category: {pred_cat}')
 
     query_obj = {
         'size': size,
@@ -64,9 +82,7 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
             "function_score": {
                 "query": {
                     "bool": {
-                        "must": [
-
-                        ],
+                        "must": must_clause,
                         "should": [  #
                             {
                                 "match": {
@@ -172,6 +188,11 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
             }
         }
     }
+
+    print('\n')
+    print(query_obj)
+    print('\n')
+
     if click_prior_query is not None and click_prior_query != "":
         query_obj["query"]["function_score"]["query"]["bool"]["should"].append({
             "query_string": {
@@ -192,11 +213,19 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
     return query_obj
 
 
-def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", use_synonym=False):
+def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", use_synonym=False, use_pred_cat=False):
     #### W3: classify the query
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
-    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], use_synonym=use_synonym, size=1)
+
+    #get predicted categories
+    pred = model.predict(user_query, k=100)
+    scores = pred[1]
+    cumulsum_scores = np.cumsum(scores)
+    num_cats = max(1, np.argmin(cumulsum_scores <= 0.5))
+    category = pred[0][:num_cats]
+
+    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], use_synonym=use_synonym, size=1, use_pred_cat=use_pred_cat, pred_cat=category)
     logging.info(query_obj)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
@@ -221,6 +250,12 @@ if __name__ == "__main__":
     general.add_argument(
         '--synonyms',
         help='if you want to use synonyms',
+        action="store_true",
+        default=False
+    )
+    general.add_argument(
+        '--predcat',
+        help='if you want to use predicated category',
         action="store_true",
         default=False
     )
@@ -260,7 +295,7 @@ if __name__ == "__main__":
         query = line.rstrip()
         if query == "Exit":
             break
-        search(client=opensearch, user_query=query, index=index_name, use_synonym=args.synonyms)
+        search(client=opensearch, user_query=query, index=index_name, sort="salePrice", use_synonym=args.synonyms, use_pred_cat=args.predcat)
 
         print(query_prompt)
 
