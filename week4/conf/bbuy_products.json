@@ -1,5 +1,6 @@
 {
   "settings": {
+    "index.knn": true,
     "analysis": {
       "analyzer": {
         "smarter_hyphens": {
@@ -155,6 +156,15 @@
       "digital": {
         "type": "boolean"
       },
+      "embeddings": {
+        "type": "knn_vector",
+        "dimension": 384,
+        "method": {
+          "name": "hnsw",
+          "space_type": "cosinesimil",
+          "engine": "nmslib"
+        }
+      },
       "features": {
         "type": "text",
         "fields": {
@@ -249,7 +259,6 @@
           "suggest": {
             "type": "completion"
           }
-
         }
       },
       "onSale": {

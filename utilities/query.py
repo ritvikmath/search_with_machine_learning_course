@@ -13,8 +13,10 @@ import fileinput
 import logging
 import fasttext
 import numpy as np
+from sentence_transformers import SentenceTransformer
 
-model = fasttext.load_model('/workspace/datasets/fasttext/query_classifier.bin')
+#model = fasttext.load_model('/workspace/datasets/fasttext/query_classifier.bin')
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,22 @@ def create_prior_queries(doc_ids, doc_id_weights,
             except KeyError as ke:
                 pass  # nothing to do in this case, it just means we can't find priors for this doc
     return click_prior_query
+
+#vector search
+def create_vector_query(user_query, n_results=100):
+    embedding = model.encode([user_query]) 
+    query = {
+        "size": n_results,
+        "query": {
+            "knn": {
+            "embeddings": {
+                "vector": list(embedding[0]),
+                "k": n_results
+                }
+            }
+        }
+    }
+    return query
 
 
 # Hardcoded query here.  Better to use search templates or other query config.
@@ -213,19 +231,25 @@ def create_query(user_query, click_prior_query, filters, sort="_score", sortDir=
     return query_obj
 
 
-def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", use_synonym=False, use_pred_cat=False):
+def search(client, user_query, index="bbuy_products", sort="_score", sortDir="desc", use_synonym=False, use_pred_cat=False, use_vector_search=False):
     #### W3: classify the query
     #### W3: create filters and boosts
     # Note: you may also want to modify the `create_query` method above
 
-    #get predicted categories
-    pred = model.predict(user_query, k=100)
-    scores = pred[1]
-    cumulsum_scores = np.cumsum(scores)
-    num_cats = max(1, np.argmin(cumulsum_scores <= 0.5))
-    category = pred[0][:num_cats]
+    #get predicted categories (fasttext)
+    if use_pred_cat:
+        pred = model.predict(user_query, k=100)
+        scores = pred[1]
+        cumulsum_scores = np.cumsum(scores)
+        num_cats = max(1, np.argmin(cumulsum_scores <= 0.5))
+        category = pred[0][:num_cats]
+    else:
+        category = ''
 
-    query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], use_synonym=use_synonym, size=1, use_pred_cat=use_pred_cat, pred_cat=category)
+    if use_vector_search:
+        query_obj = create_vector_query(user_query, 100)
+    else:
+        query_obj = create_query(user_query, click_prior_query=None, filters=None, sort=sort, sortDir=sortDir, source=["name", "shortDescription"], use_synonym=use_synonym, size=1, use_pred_cat=use_pred_cat, pred_cat=category)
     logging.info(query_obj)
     response = client.search(query_obj, index=index)
     if response and response['hits']['hits'] and len(response['hits']['hits']) > 0:
@@ -256,6 +280,12 @@ if __name__ == "__main__":
     general.add_argument(
         '--predcat',
         help='if you want to use predicated category',
+        action="store_true",
+        default=False
+    )
+    general.add_argument(
+        '--vector',
+        help='if you want to use vector search',
         action="store_true",
         default=False
     )
@@ -295,8 +325,6 @@ if __name__ == "__main__":
         query = line.rstrip()
         if query == "Exit":
             break
-        search(client=opensearch, user_query=query, index=index_name, sort="salePrice", use_synonym=args.synonyms, use_pred_cat=args.predcat)
+        search(client=opensearch, user_query=query, index=index_name, sort="salePrice", use_synonym=args.synonyms, use_pred_cat=args.predcat, use_vector_search=args.vector)
 
         print(query_prompt)
-
-    
